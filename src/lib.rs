@@ -337,6 +337,10 @@ pub struct SerialPortBuilder {
     /// Whether to enforce exclusive access to the port
     #[cfg(unix)]
     exclusive: bool,
+    /// Whether to use low latency mode
+    low_latency: bool,
+    /// Whether to use asynchronous I/O
+    async_io: bool,
 }
 
 impl SerialPortBuilder {
@@ -428,6 +432,20 @@ impl SerialPortBuilder {
     #[must_use]
     pub fn exclusive(mut self, exclusive: bool) -> Self {
         self.exclusive = exclusive;
+        self
+    }
+
+    /// Enable or disable low latency mode
+    /// For Linux, it will enable the low latency flag on the serial port if supported by the driver.
+    pub fn low_latency(mut self, enable: bool) -> Self {
+        self.low_latency = enable;
+        self
+    }
+
+    /// Enable or disable asynchronous I/O
+    /// if enabled, read and write operations will not block.
+    pub fn async_io(mut self, enable: bool) -> Self {
+        self.async_io = enable;
         self
     }
 
@@ -911,6 +929,8 @@ pub fn new<'a>(path: impl Into<std::borrow::Cow<'a, str>>, baud_rate: u32) -> Se
         dtr_on_open: None,
         #[cfg(unix)]
         exclusive: true,
+        low_latency: false,
+        async_io: false,
     }
 }
 

@@ -9,7 +9,8 @@ use windows_sys::Win32::Foundation::{
     INVALID_HANDLE_VALUE, TRUE,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    CreateFileW, FlushFileBuffers, ReadFile, WriteFile, FILE_ATTRIBUTE_NORMAL, OPEN_EXISTING,
+    CreateFileW, FlushFileBuffers, ReadFile, WriteFile, FILE_ATTRIBUTE_NORMAL,
+    FILE_FLAG_OVERLAPPED, OPEN_EXISTING,
 };
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 
@@ -60,6 +61,11 @@ impl COMPort {
         name.push(0);
 
         let share_mode = 0;
+        let file_attributes = if builder.async_io {
+            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED
+        } else {
+            FILE_ATTRIBUTE_NORMAL
+        };
 
         let handle = unsafe {
             CreateFileW(
@@ -68,7 +74,7 @@ impl COMPort {
                 share_mode,
                 ptr::null_mut(),
                 OPEN_EXISTING,
-                FILE_ATTRIBUTE_NORMAL,
+                file_attributes,
                 0 as HANDLE,
             )
         };
@@ -94,8 +100,12 @@ impl COMPort {
         if let Some(dtr) = builder.dtr_on_open {
             let _ = com.write_data_terminal_ready(dtr);
         }
+        if builder.async_io {
+            com.set_async_timeout()?;
+        } else {
+            com.set_timeout(builder.timeout)?;
+        }
 
-        com.set_timeout(builder.timeout)?;
         com.port_name = Some(builder.path.clone());
         Ok(com)
     }
@@ -175,6 +185,21 @@ impl COMPort {
         // long-ish timeout. But just casting to DWORD would result in presumably unexpected short
         // and non-monotonic timeouts from cutting off the higher bits.
         u128::min(milliseconds, u32::MAX as u128 - 1) as u32
+    }
+
+    fn set_async_timeout(&mut self) -> Result<()> {
+        let timeouts = COMMTIMEOUTS {
+            ReadIntervalTimeout: 0xFFFFFFFF,
+            ReadTotalTimeoutMultiplier: 0xFFFFFFFF,
+            ReadTotalTimeoutConstant: 0xEFFFFFFF,
+            WriteTotalTimeoutMultiplier: 0,
+            WriteTotalTimeoutConstant: 0,
+        };
+
+        if unsafe { SetCommTimeouts(self.handle, &timeouts) } == 0 {
+            return Err(super::error::last_os_error());
+        }
+        Ok(())
     }
 }
 
