@@ -4,8 +4,8 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 use std::{io, mem};
 
-use nix::fcntl::{fcntl, OFlag};
-use nix::{libc, unistd};
+use nix::fcntl::{OFlag, fcntl};
+use nix::{ioctl_read_bad, ioctl_write_ptr_bad, libc, unistd};
 
 use crate::posix::flock;
 use crate::posix::ioctl::{self, SerialLines};
@@ -101,6 +101,34 @@ impl OwnedFd {
     }
 }
 
+pub const TIOCGSERIAL: u32 = 21534;
+pub const TIOCSSERIAL: u32 = 21535;
+pub const ASYNC_LOW_LATENCY: u32 = 8192;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct SerialStruct {
+    pub type_: libc::c_int,
+    pub line: libc::c_int,
+    pub port: libc::c_uint,
+    pub irq: libc::c_int,
+    pub flags: libc::c_int,
+    pub xmit_fifo_size: libc::c_int,
+    pub custom_divisor: libc::c_int,
+    pub baud_base: libc::c_int,
+    pub close_delay: libc::c_ushort,
+    pub io_type: libc::c_char,
+    pub reserved_char: [libc::c_char; 1],
+    pub hub6: libc::c_int,
+    pub closing_wait: libc::c_ushort,
+    pub closing_wait2: libc::c_ushort,
+    pub iomem_base: *mut libc::c_uchar,
+    pub iomem_reg_shift: libc::c_ushort,
+    pub port_high: libc::c_uint,
+    pub iomap_base: libc::c_ulong,
+}
+ioctl_read_bad!(tiocgserial, TIOCGSERIAL, SerialStruct);
+ioctl_write_ptr_bad!(tiocsserial, TIOCSSERIAL, SerialStruct);
+
 impl TTYPort {
     /// Opens a TTY device as a serial port.
     ///
@@ -174,8 +202,10 @@ impl TTYPort {
             unsafe { libc::tcflush(fd.0, libc::TCIOFLUSH) };
         }
 
-        // clear O_NONBLOCK flag
-        fcntl(fd.0, F_SETFL(nix::fcntl::OFlag::empty()))?;
+        // clear O_NONBLOCK flag if not opening for async IO
+        if !builder.async_io {
+            fcntl(fd.0, F_SETFL(nix::fcntl::OFlag::empty()))?;
+        }
 
         // Configure the low-level port settings
         let mut termios = termios::get_termios(fd.0)?;
@@ -189,6 +219,22 @@ impl TTYPort {
         termios::set_termios(fd.0, &termios, builder.baud_rate)?;
         #[cfg(not(any(target_os = "ios", target_os = "macos")))]
         termios::set_termios(fd.0, &termios)?;
+
+        if builder.low_latency {
+            let mut serial_info = MaybeUninit::<SerialStruct>::uninit();
+            let result = unsafe {
+                tiocgserial(fd.0, serial_info.as_mut_ptr())
+            };
+            // Some devices don't support TIOCGSERIAL, so we ignore errors
+            if result.is_ok() {
+                let mut serial_info = unsafe { serial_info.assume_init() };
+                serial_info.flags |= ASYNC_LOW_LATENCY as i32;
+                // Apply the new settings, ignoring errors
+                let _ = unsafe {
+                    tiocsserial(fd.0, &serial_info)
+                };
+            }
+        }
 
         // Return the final port object
         let mut port = TTYPort {

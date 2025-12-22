@@ -334,6 +334,10 @@ pub struct SerialPortBuilder {
     timeout: Duration,
     /// The state to set DTR to when opening the device
     dtr_on_open: Option<bool>,
+    /// Whether to use low latency mode
+    low_latency: bool,
+    /// Whether to use asynchronous I/O
+    async_io: bool,
 }
 
 impl SerialPortBuilder {
@@ -413,6 +417,20 @@ impl SerialPortBuilder {
     #[must_use]
     pub fn preserve_dtr_on_open(mut self) -> Self {
         self.dtr_on_open = None;
+        self
+    }
+
+    /// Enable or disable low latency mode
+    /// For Linux, it will enable the low latency flag on the serial port if supported by the driver.
+    pub fn low_latency(mut self, enable: bool) -> Self {
+        self.low_latency = enable;
+        self
+    }
+
+    /// Enable or disable asynchronous I/O
+    /// if enabled, read and write operations will not block.
+    pub fn async_io(mut self, enable: bool) -> Self {
+        self.async_io = enable;
         self
     }
 
@@ -894,6 +912,8 @@ pub fn new<'a>(path: impl Into<std::borrow::Cow<'a, str>>, baud_rate: u32) -> Se
         // substantially larger area than the one benefitting from it, I finally decided to revert
         // this. Sorry for this back and forth, Christian.
         dtr_on_open: None,
+        low_latency: false,
+        async_io: false,
     }
 }
 
