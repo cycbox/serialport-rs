@@ -190,7 +190,7 @@ impl COMPort {
         let timeouts = COMMTIMEOUTS {
             ReadIntervalTimeout: 0xFFFFFFFF,
             ReadTotalTimeoutMultiplier: 0xFFFFFFFF,
-            ReadTotalTimeoutConstant: 0xEFFFFFFF,
+            ReadTotalTimeoutConstant: 0x7FFFFFFE,
             WriteTotalTimeoutMultiplier: 0,
             WriteTotalTimeoutConstant: 0,
         };
