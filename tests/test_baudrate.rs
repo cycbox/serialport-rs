@@ -142,6 +142,7 @@ mod builder {
                 target_os = "linux",
                 any(target_arch = "powerpc", target_arch = "powerpc64")
             ),
+            all(target_os = "linux", target_env = "musl"),
         ),
         ignore
     )]
@@ -237,6 +238,7 @@ mod new {
                 target_os = "linux",
                 any(target_arch = "powerpc", target_arch = "powerpc64")
             ),
+            all(target_os = "linux", target_env = "musl"),
         ),
         ignore
     )]
@@ -349,6 +351,7 @@ mod set_baud {
                 target_os = "linux",
                 any(target_arch = "powerpc", target_arch = "powerpc64")
             ),
+            all(target_os = "linux", target_env = "musl"),
         ),
         ignore
     )]
